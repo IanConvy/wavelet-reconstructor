@@ -1,2 +1,2 @@
 # wavelet-reconstructor
-A wavelet-based neural network model for dimensionality reduction and sample reconstruction
+Implements a neural network algorithm that uses wavelets to reconstruct images and other data, which operates by outputting reasonable wavelet coefficients given a set of scale coefficients as an input. The algorithm can be be used for generative modeling, with the latent space being the space of scale coefficients at an approapriate level of coarse-graining, as well as for data reconstruction.
