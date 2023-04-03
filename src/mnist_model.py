@@ -3,7 +3,7 @@ import tensorflow_probability as tfp
 import numpy as np
 import matplotlib.pyplot as plt
 
-import wavelet
+from src import wavelet
 
 # This module defines the wavelet decomposition models and
 # runs numerical test.
@@ -21,9 +21,9 @@ class Wavelet_MNIST():
         self.recon_layer = wavelet.Wavelet_nD_Recon(h)
 
     def load(self):
-        self.cores = [tf.keras.models.load_model(f"models/core_{2**i}") for i in range(5)]
+        self.cores = [tf.keras.models.load_model(f"src/models/core_{2**i}") for i in range(5)]
         self.models = [self.assemble_model(core, 2**i) for (i, core) in enumerate(self.cores)]
-        self.cleaner = tf.keras.models.load_model("models/cleaner_4")
+        self.cleaner = tf.keras.models.load_model("src/models/cleaner_4")
 
     def build(self):
 
@@ -125,7 +125,7 @@ class Wavelet_MNIST():
             callbacks = [tf.keras.callbacks.EarlyStopping(monitor = "val_loss", patience = 10, restore_best_weights = True)])
         if save:
             core = self.cores[index]
-            core.save(f"models/core_{length}")
+            core.save(f"src/models/core_{length}")
 
     def train_cleaner(self, length, train_images, test_images, epochs, batch_size, save = False):
 
@@ -159,7 +159,7 @@ class Wavelet_MNIST():
             validation_data = test_data,
             callbacks = [tf.keras.callbacks.EarlyStopping(monitor = "val_loss", patience = 10, restore_best_weights = True)])
         if save:
-            self.cleaner.save(f"models/cleaner_{length}")
+            self.cleaner.save(f"src/models/cleaner_{length}")
 
     def assemble_model(self, core, length):
 
