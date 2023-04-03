@@ -8,7 +8,7 @@ import wavelet
 # This module defines the wavelet decomposition models and
 # runs numerical test.
 
-class Wavelet():
+class Wavelet_MNIST():
 
     # This model is trained to generate the wavelet coefficients
     # needed to reconstruct an input given its scale coefficients.
@@ -21,9 +21,9 @@ class Wavelet():
         self.recon_layer = wavelet.Wavelet_nD_Recon(h)
 
     def load(self):
-        self.cores = [tf.keras.models.load_model(f"mnist_models/wavelet/core_{2**i}") for i in range(5)]
+        self.cores = [tf.keras.models.load_model(f"models/core_{2**i}") for i in range(5)]
         self.models = [self.assemble_model(core, 2**i) for (i, core) in enumerate(self.cores)]
-        self.cleaner = tf.keras.models.load_model("mnist_models/wavelet/cleaner_4")
+        self.cleaner = tf.keras.models.load_model("models/cleaner_4")
 
     def build(self):
 
@@ -107,7 +107,8 @@ class Wavelet():
     def train(self, length, train_images, test_images, epochs, batch_size, save = False):
 
         # Each model is trained using the exact decomposition coefficients, rather than the
-        # reconstructed output from the previous layers.
+        # reconstructed output from the previous layers. The "length" argument sets which
+        # coarse-graining level should be used for training.
 
         train_data = self.wavelet_transform(train_images.shuffle(60000).batch(batch_size), length)
         test_data = self.wavelet_transform(test_images.batch(batch_size), length)
@@ -124,7 +125,7 @@ class Wavelet():
             callbacks = [tf.keras.callbacks.EarlyStopping(monitor = "val_loss", patience = 10, restore_best_weights = True)])
         if save:
             core = self.cores[index]
-            core.save(f"mnist_models/wavelet/core_{length}")
+            core.save(f"models/core_{length}")
 
     def train_cleaner(self, length, train_images, test_images, epochs, batch_size, save = False):
 
@@ -158,7 +159,7 @@ class Wavelet():
             validation_data = test_data,
             callbacks = [tf.keras.callbacks.EarlyStopping(monitor = "val_loss", patience = 10, restore_best_weights = True)])
         if save:
-            self.cleaner.save(f"mnist_models/wavelet/cleaner_{length}")
+            self.cleaner.save(f"models/cleaner_{length}")
 
     def assemble_model(self, core, length):
 
@@ -232,7 +233,7 @@ class Wavelet():
         mean = tf.reduce_mean(data, 0)
         samples = tfp.distributions.MultivariateNormalFullCovariance(mean, cov).sample([num_samples])
         recon = self.reconstruct(tf.reshape(samples, [num_samples, length, length]))
-        cleaned = self.cleaner(recon)
+        cleaned = self.clean(recon)[:, 2:30, 2:30]
         return cleaned
 
 def get_images():
@@ -244,16 +245,16 @@ def get_images():
     test_images = tf.data.Dataset.from_tensor_slices(test_data).map(lambda x: tf.cast(x, "float32") / 255)
     return (train_images, test_images)
 
-def run_similarity_trial(model, train_images, num_samples = 100):
+def run_similarity_trial(model, train_images, num_samples = 20):
 
     # This function generates samples from a generative model and
     # then matches it with the closest example from the training set.
 
-    orig_images = next(iter(train_images.batch(60000))).numpy()
-    sampled_images = model.sample(num_samples).numpy()
+    orig_images = train_images.batch(60000).get_single_element()
+    sampled_images = model.sample_gaussian(train_images, 2, num_samples)
     sqr_diff = (orig_images[None] - sampled_images[:, None])**2
-    closest_index = np.argmin(sqr_diff.sum(axis = (-1, -2)), 1)
-    closest_images = orig_images[closest_index]
+    closest_index = tf.argmin(tf.reduce_sum(sqr_diff, axis = (-1, -2)), 1).numpy()
+    closest_images = orig_images.numpy()[closest_index]
     for (sampled_image, closest_image) in zip(sampled_images, closest_images):
         (fig, (ax_1, ax_2)) = plt.subplots(1, 2)
         ax_1.imshow(sampled_image, cmap = "gray")
@@ -268,25 +269,26 @@ def clip_pixels(inputs):
     clipped = tf.where(lower_bound < 1, lower_bound, tf.ones_like(inputs))
     return clipped
 
-# The following code trains (or loads) a reconstruction
-# model and then evaluates its performance on the test set.
+if __name__ == "__main__":
 
-(train_images, test_images) = get_images()
+    # The following code trains (or loads) a reconstruction
+    # model and then evaluates its performance on the test set.
 
-batch_size = 32
-epochs = 10
+    (train_images, test_images) = get_images()
 
-model = Wavelet(wavelet.d_4)
-model.build()
-model.train_all(train_images, test_images, epochs, batch_size, True)
-# model.load()
-model.train_cleaner(2, train_images, test_images, epochs, batch_size, True)
+    batch_size = 32
+    epochs = 10
 
-for ((decon, _), orig) in tf.data.Dataset.zip((model.wavelet_transform(test_images.batch(1), 4), test_images)):
-    recon = model.reconstruct(decon)[0]
-    clipped = clip_pixels(recon)[2:30, 2:30]
-    (fig, (ax_1, ax_2, ax_3)) = plt.subplots(1, 3)
-    ax_1.imshow(clipped, cmap = "gray")
-    ax_2.imshow(model.clean(recon[None])[0, 2:30, 2:30], cmap = "gray")
-    ax_3.imshow(orig, cmap = "gray")
-    plt.show()
+    model = Wavelet_MNIST(wavelet.d_4)
+    model.build()
+    model.train_all(train_images, test_images, epochs, batch_size, True)
+    model.train_cleaner(4, train_images, test_images, epochs, batch_size, True)
+
+    for ((decon, _), orig) in tf.data.Dataset.zip((model.wavelet_transform(test_images.batch(1), 4), test_images)):
+        recon = model.reconstruct(decon)[0]
+        clipped = clip_pixels(recon)[2:30, 2:30]
+        (fig, (ax_1, ax_2, ax_3)) = plt.subplots(1, 3)
+        ax_2.imshow(clipped, cmap = "gray")
+        ax_3.imshow(model.clean(recon[None])[0, 2:30, 2:30], cmap = "gray")
+        ax_1.imshow(orig, cmap = "gray")
+        plt.show()

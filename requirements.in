@@ -1,0 +1,6 @@
+tensorflow == 2.6.5
+tensorflow-probability == 0.13.0
+matplotlib == 3.3.2
+numpy == 1.19.5
+pywavelets == 1.1.1
+notebook == 6.5.3

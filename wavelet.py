@@ -125,6 +125,11 @@ class Wavelet_Decon(tf.keras.layers.Layer):
     # axis, returning both the scale and wavelet coefficients.
 
     def __init__(self, h, axis, **kwargs):
+
+        # The h_0 and h_1 attributes are the filter values for 
+        # computing the scale coefficients and wavelet coefficients
+        # respectively.
+
         super().__init__(**kwargs)
         h = tf.constant(h)
         indices = tf.range(tf.size(h))
@@ -134,10 +139,23 @@ class Wavelet_Decon(tf.keras.layers.Layer):
         self.axis = axis
 
     def build(self, input_shape):
+
+        # The permute attribute simply specifies indices for a 
+        # transposition that places the target axis at the end
+        # of the tensor shape.
+
         num_dims = input_shape.rank
         self.permute = tf.dynamic_stitch([tf.range(num_dims), [self.axis, num_dims-1]], [tf.range(num_dims), [num_dims-1, self.axis]])
 
     def call(self, inputs):
+
+        # To perform the decomposition, the input is first 
+        # appended with a truncated copy of itself so that 
+        # it is big enough to allow the filters to act on all
+        # featutes. Then the scale and wavelet coefficients 
+        # are computed by convolving the expanded input
+        # with h_0 and h_1.
+
         inputs = tf.transpose(inputs, self.permute)
         cycle_indices = self.basis_indices % tf.shape(inputs)[-1]
         periodic_coeff = tf.concat([inputs, tf.gather(inputs, cycle_indices, axis = -1)], axis = -1)
